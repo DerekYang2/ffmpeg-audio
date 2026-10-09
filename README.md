@@ -44,13 +44,13 @@ docker run --rm -v "${PWD}:/work" -e BUILD_DIR=/tmp/build -e CHECK_ONLY=1 ffmpeg
 pwsh .\test.ps1 -Ffmpeg dist\ffmpeg-9.0.2-audio-win-x64\ffmpeg.exe -Reference C:\path\to\full\ffmpeg.exe
 ```
 
-The reference is any full ffmpeg build. The test uses it to make inputs this build can't write, such as WMA, AC-3, WavPack and files with cover art. CI runs the test on x64. The ARM64 build is only compiled there, because GitHub's x64 runners can't run ARM64 programs.
+The reference is any full ffmpeg build. The test uses it to make inputs this build can't write, such as WMA, AC-3, WavPack and files with cover art. CI runs the test on x64 and, on GitHub's Arm64 runner, on ARM64.
 
 FluentDL's Vorbis and Opus conversions need `-vn` with this build. Without it, a source with cover art makes ffmpeg encode the cover as a Theora video stream in the Ogg file. A full build does that without complaint, and this one has no Theora encoder.
 
 ## Releases
 
-Pushing a tag such as `v9.0.2-1` builds both architectures, tests x64, and attaches the zips to a GitHub release.
+Pushing a tag such as `v9.0.2-1` builds both architectures, tests them, and attaches the zips to a GitHub release.
 
 ## Licenses
 

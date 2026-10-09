@@ -36,14 +36,24 @@ jobs:
           if-no-files-found: error
 
   test:
-    name: Test (x64)
+    name: Test (${{ matrix.arch }})
     needs: build
-    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-latest
+            reference: ffmpeg-n9.0-latest-win64-gpl-9.0.zip
+          - arch: arm64
+            runner: windows-11-arm
+            reference: ffmpeg-n9.0-latest-winarm64-gpl-9.0.zip
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
-          name: ffmpeg-x64
+          name: ffmpeg-${{ matrix.arch }}
           path: dist
       - name: Unzip the build
         shell: pwsh
@@ -53,7 +63,7 @@ jobs:
         shell: pwsh
         run: |
           $zip = "$env:RUNNER_TEMP/reference.zip"
-          Invoke-WebRequest https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-win64-gpl-9.0.zip -OutFile $zip
+          Invoke-WebRequest https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/${{ matrix.reference }} -OutFile $zip
           Expand-Archive $zip "$env:RUNNER_TEMP/reference"
           $exe = Get-ChildItem "$env:RUNNER_TEMP/reference" -Recurse -Filter ffmpeg.exe | Select-Object -First 1
           "REFERENCE_FFMPEG=$($exe.FullName)" >> $env:GITHUB_ENV
