@@ -1,0 +1,80 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [x64, arm64]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Cache the source tarballs
+        uses: actions/cache@v6
+        with:
+          path: .cache/sources
+          key: sources-${{ hashFiles('versions.sh') }}
+      - name: Build the Docker image
+        run: docker build -t ffmpeg-audio-build .
+      - name: Build ffmpeg
+        run: docker run --rm -v "$PWD:/work" -e BUILD_DIR=/tmp/build ffmpeg-audio-build bash /work/build.sh ${{ matrix.arch }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ffmpeg-${{ matrix.arch }}
+          path: dist/*.zip
+          if-no-files-found: error
+
+  test:
+    name: Test (x64)
+    needs: build
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: ffmpeg-x64
+          path: dist
+      - name: Unzip the build
+        shell: pwsh
+        run: Get-ChildItem dist/*.zip | ForEach-Object { Expand-Archive $_ dist -Force }
+      # A full build makes the inputs this build can't write, such as WMA, AC-3 and WavPack.
+      - name: Download a full ffmpeg for the test inputs
+        shell: pwsh
+        run: |
+          $zip = "$env:RUNNER_TEMP/reference.zip"
+          Invoke-WebRequest https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-n9.0-latest-win64-gpl-9.0.zip -OutFile $zip
+          Expand-Archive $zip "$env:RUNNER_TEMP/reference"
+          $exe = Get-ChildItem "$env:RUNNER_TEMP/reference" -Recurse -Filter ffmpeg.exe | Select-Object -First 1
+          "REFERENCE_FFMPEG=$($exe.FullName)" >> $env:GITHUB_ENV
+      - name: Run the tests
+        shell: pwsh
+        run: ./test.ps1 -Ffmpeg (Get-ChildItem dist -Recurse -Filter ffmpeg.exe | Select-Object -First 1).FullName -Reference $env:REFERENCE_FFMPEG
+
+  release:
+    name: Release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" dist/*.zip --repo "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes
